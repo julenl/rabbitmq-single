@@ -1,0 +1,48 @@
+#!/bin/bash -e
+
+## This is not really a test. It does not need to be executable
+## It just launches a machine for testing and exports some variables
+## This file is supposed to be sourced by the rest of the tests
+##  so that the same commands are not repeated in each of them
+
+## Deploy service only if not already running
+SERVICE_RUNNING=$(juju status |grep "rabbitmq-single:" || echo '')
+
+if [ -z $SERVICE_RUNNING ]
+  then
+     juju deploy --repository=/home/julen/charm local:trusty/rabbitmq-single
+fi
+
+## Get unit name of the service
+unset UNIT_NAME
+while [ -z $UNIT_NAME ]
+  do
+    echo "waiting for unit name"
+    export UNIT_NAME=$(juju status |grep -A1 units |tail -1 |awk -F: '{print $1}' |awk '{print $1}')
+    sleep 1 
+  done
+
+echo "Unit name: $UNIT_NAME"
+
+## Wait until we can parse the IP of the unit
+unset IP
+TIME=0
+echo "Waiting for the IP of the unit"
+while [ -z $IP ]
+  do
+    echo -ne '.'
+    export IP=$(juju status |grep -A15 units |grep public-address: | awk '{print $2}')
+    sleep 2
+    TIME=$[$TIME +2]
+  done
+[ $TIME -lt 3 ] && MSG="WoW! That was fast!"
+echo "$MSG"
+
+echo "To avoid issues with ~/.ssh/known_hosts, clear $IP from the list"
+sudo ssh-keygen -f "/root/.ssh/known_hosts" -R $IP #&> /dev/null || echo ''
+juju run --unit ${UNIT_NAME} hostname #&> /dev/null || echo ''
+
+## Ensure that the service is installed and the openstack user created
+echo "Now copying and executing the script 'tests/scripts/test-00-install'"
+juju scp tests/scripts/test-00-install ${UNIT_NAME}:/tmp
+juju run --unit ${UNIT_NAME} /tmp/test-00-install

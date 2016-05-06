@@ -1,0 +1,89 @@
+#!/bin/bash -e
+
+R_USER="openstack"
+R_PASSWD="OpenStack"
+
+echo " - Check if user $R_USER exists locally"
+sudo rabbitmqctl list_users |grep openstack > /dev/null && echo "  OK: user $R_USER exists"
+[ ! $? -eq 0 ] && echo "WARNING: Default rabbit user $R_USER NOT found"
+
+TMPF=/etc/rabbitmq/rabbitmq-env.conf
+
+if [ -f $TMPF ]
+  then
+    BIND_PORT=$(egrep "^NODE_PORT" $TMPF |awk -F= '{print $2}')
+    BIND_ADDRESS=$(egrep "^NODE_IP_ADDRESS" $TMPF |awk -F= '{print $2}')
+  else
+    echo "  WARNING: File $TMPF does not exist"
+fi
+ 
+[ -z "$NODE_PORT" ] && NODE_PORT=5672
+
+if [ -z "$BIND_ADDRESS" ] 
+ then
+   echo "  Using default interface option => link as bind address"
+   UPLINK_IFACE=$(ip route |grep default | awk -F"dev" '{print $2}'| awk '{print $1}')
+   BIND_ADDRESS=$(ip addr show $UPLINK_IFACE | grep 'state UP' -A2 | \
+                  tail -n1 | awk '{print $2}' | cut -f1  -d'/')
+   echo "  Validate BIND_ADDRESS at $BIND_ADDRESS"
+   ping -c1 $BIND_ADDRESS > /dev/null && echo '  OK: ping works'
+ else
+   echo "  Using BIND_ADDRESS=$BIND_ADDRESS"
+fi
+
+
+if ! sudo dpkg -s python-pika &> /dev/null
+  then
+    sudo apt-get -y install python-pika > /dev/null
+    PURGE_PIKA=True
+fi
+
+
+cat << EOF > /tmp/test_send.py
+#!/usr/bin/env python
+import pika
+
+connection = pika.BlockingConnection(pika.ConnectionParameters(
+               '$BIND_ADDRESS'))
+channel = connection.channel()
+
+channel.queue_declare(queue='rmq_charm_test')
+
+channel.basic_publish(exchange='',
+                      routing_key='rmq_charm_test',
+                      body='Testing the queue')
+print("   OK: message sent")
+
+connection.close()
+EOF
+
+chmod +x /tmp/test_send.py
+echo '  Sending message...'
+/tmp/test_send.py 2> /dev/null
+
+
+
+cat << EOF > /tmp/test_receive.py
+#!/usr/bin/env python
+import pika
+
+connection = pika.BlockingConnection(pika.ConnectionParameters(
+        host='$BIND_ADDRESS'))
+channel = connection.channel()
+method_frame, header_frame, body = channel.basic_get('rmq_charm_test')
+if method_frame:
+    print body
+    channel.basic_ack(method_frame.delivery_tag)
+else:
+    print 'ERROR: No message returned'
+
+EOF
+
+chmod +x /tmp/test_receive.py
+echo '  Receiving message...'
+timeout 2s /tmp/test_receive.py |grep "Testing the queue" && \
+  echo "  OK: Message received"
+[ ! $? -eq 0 ] && echo " ERROR: Message not received"
+
+## If pika was not installed when we started, remove it
+[ -z $PURGE_KOMBU ] || sudo apt-get -y remove python-pika &> /dev/null

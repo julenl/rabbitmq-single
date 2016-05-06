@@ -1,0 +1,29 @@
+#!/bin/bash -e
+
+## This script makes some superficial check of the service
+
+echo ' - Check rabbitmqctl status superficially'
+OUT=$(sudo rabbitmqctl status|wc -l)
+[ $OUT -gt 30 ] && echo '  OK: The status does have some content'
+[ ! $? -eq 0 ] && echo 'ERROR: output of command "rabbitmqctl status" seems too short'
+
+
+echo ' - Check status of queues superficially'
+
+echo ' - Check that the queues are created'
+OUT=$(sudo rabbitmqctl list_queues \
+     |grep -v "Listing queues ..." |grep -v "...done" | wc -l)
+[ $OUT -gt 0 ] && echo 'OK'
+[ ! $? -eq 0 ] && echo 'WARNING: There are no queues defined'
+
+
+echo ' - Check that the queues do not have pendign messages '
+OUT=$(sudo rabbitmqctl list_queues \
+     |grep -v "Listing queues ..." |grep -v "...done" |\
+     grep -v "0$"|wc -l)
+[ $OUT -eq 0 ] && echo '  OK: queues are empty'
+[ ! $? -eq 0 ] && echo 'WARNING: ' && \
+    echo '  Some queues have pending messages:' && \
+    sudo rabbitmqctl list_queues |grep -v "Listing queues ..." |grep -v "0$"
+
+echo "test-01-service completed"

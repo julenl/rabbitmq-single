@@ -1,0 +1,9 @@
+#!/bin/bash -e
+
+. tests/000-setup
+
+juju scp tests/scripts/test-03-send_receive ${UNIT_NAME}:/tmp
+# This is a trick to avoid the devconf warnings
+juju run --unit ${UNIT_NAME} /tmp/test-03-send_receive &> /dev/null || echo ""
+juju run --unit ${UNIT_NAME} /tmp/test-03-send_receive 2>1 
+

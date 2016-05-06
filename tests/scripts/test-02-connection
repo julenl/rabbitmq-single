@@ -1,0 +1,70 @@
+#!/bin/bash -e
+
+R_USER="openstack"
+R_PASSWD="OpenStack"
+
+echo " - Check if user $R_USER exists locally"
+sudo rabbitmqctl list_users |grep openstack > /dev/null && echo '  OK: user openstack exists'
+[ ! $? -eq 0 ] && echo "WARNING: Default rabbit user $R_USER NOT found"
+
+TMPF=/etc/rabbitmq/rabbitmq-env.conf
+if [ -f $TMPF ]
+  then
+    BIND_PORT=$(egrep "^NODE_PORT" $TMPF |awk -F= '{print $2}')
+    BIND_ADDRESS=$(egrep "^NODE_IP_ADDRESS" $TMPF |awk -F= '{print $2}')
+  else
+    echo "  WARNING: File $TMPF does not exist"
+fi
+
+[ -z "$NODE_PORT" ] && BIND_PORT=5672
+
+if [ -z "$BIND_ADDRESS" ]; 
+ then
+   echo "  Using default interface option => link as bind address"
+   UPLINK_IFACE=$(ip route |grep default | awk -F"dev" '{print $2}'| awk '{print $1}')
+   BIND_ADDRESS=$(ip addr show $UPLINK_IFACE | grep 'state UP' -A2 | \
+                  tail -n1 | awk '{print $2}' | cut -f1  -d'/')
+   echo "  Validate BIND_ADDRESS. IP=$BIND_ADDRESS"
+   ping -c1 $BIND_ADDRESS > /dev/null && echo '  OK: ping works'
+fi
+
+
+
+
+if ! sudo dpkg -s python-kombu &> /dev/null
+  then
+    sudo apt-get -y install python-kombu > /dev/null
+    PURGE_KOMBU=True
+fi
+
+echo "  Trying to validate user credentials for user:$R_USER pwd:$R_PASSWD on HOST=$BIND_ADDRESS"
+
+cat << EOF > /tmp/test_credentials.py
+#!/usr/bin/env python
+import socket
+from kombu import Connection
+vhost = "/"
+url = 'amqp://{0}:{1}@{2}:{3}/{4}'.format("$R_USER", "$R_PASSWD", "$BIND_ADDRESS", "$BIND_PORT", vhost)
+with Connection(url) as c:
+    try:
+        c.connect()
+    except socket.error:
+        raise ValueError("Received socket.error, "
+                         "rabbitmq-server daemon is probably down")
+    except IOError:
+        raise ValueError("Received IOError, probably bad password")
+    else:
+        print "  Succesfully loged in as user openstack"
+
+EOF
+
+chmod +x /tmp/test_credentials.py
+
+
+
+echo " - Check login credentials for user $R_USER"
+/tmp/test_credentials.py && echo "  OK: credentials for user $R_USER are good"
+[ ! $? -eq 0 ] && echo "ERROR: unable to loging with user=$R_USER and password=$R_PASSWD on host=$BIND_ADDRESS"
+
+## If kombu was not installed when we started, remove it
+[ -z $PURGE_KOMBU ] && sudo apt-get -y remove python-kombu &> /dev/null 

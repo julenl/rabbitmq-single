@@ -1,0 +1,14 @@
+name: rabbitmq-single
+summary: Short a clean rabbitmq installer and checker in Bash
+maintainer: Julen Larrucea <julen@larrucea.eu>
+description: |
+  Short a clean rabbitmq installer and checker in Bash.
+  Not as good as the rabbitmq-server from James, but this 
+  is just my first charm...
+tags:
+  - amqp
+  - misc
+subordinate: false
+provides:
+  amqp:
+    interface: rabbitmq

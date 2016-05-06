@@ -1,0 +1,26 @@
+
+These tests are standalone. Any of them can be directly executed from the charm
+root directory even with an already bootstraped environment.
+Just like:
+
+./tests/002-port-listening
+
+Each one of these scripts will create the rabbitmq-single service, but if it is already
+existing (in the case of already bootstrapped environment), it will re-use the existing one.
+
+The scripts on the tests/ directory execute on the local machine and the 
+ones on the "tests/scripts" sub-directory are run on the remote machine by calling internally:
+juju run --unit XXX tests/scripts/0X-YYY
+
+where:
+XXX: Unit name (something like rabbitmq-single/0
+0X-YYY: The name of the test on the scripts directory
+
+To run all the tests the same way as the CI tools do, make sure there is no bootstrapped
+environment with
+juju destroy-environment local (optional --force)
+
+and run:
+juju test (optional -o log/ -v)
+
+

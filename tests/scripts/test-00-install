@@ -1,0 +1,32 @@
+#!/bin/bash -e
+
+## Check if package rabbitmq-server was installed, ensure it runs
+## and ensure user openstack exists
+
+echo ' - Check if package was installed properly'
+if sudo dpkg -s rabbitmq-server > /dev/null
+  then
+    echo " OK: Package rabbitmq-server is installed"
+  else
+     sudo apt-get -y install rabbitmq-server
+fi
+
+
+echo ' - Check if service is running'
+STATUS=$(service --status-all 2>1 | grep rabbitmq-server | awk '{print $2}')
+[ "$STATUS" = "+" ] && echo " OK: service seems running"
+[ ! $? -eq 0 ] && echo 'ERROR: service rabbitmq-server not running'
+
+
+echo ' - Check if user openstack was created properly'
+## If user openstack does not exist, create it with pwd OpenStack"
+if sudo rabbitmqctl list_users |grep openstack > /dev/null
+  then
+    echo " OK: User openstack is already created"
+  else 
+    echo "  ... Creating user openstack with pwd OpenStack"
+    RABBIT_PASS="OpenStack"
+    sudo rabbitmqctl add_user openstack $RABBIT_PASS
+    sudo rabbitmqctl set_permissions openstack ".*" ".*" ".*"
+fi
+

@@ -1,0 +1,9 @@
+#!/bin/bash -e
+
+## This script checks the service superficially
+
+. tests/000-setup
+
+juju scp tests/scripts/test-01-service ${UNIT_NAME}:/tmp
+juju run --unit ${UNIT_NAME} /tmp/test-01-service
+

@@ -1,0 +1,23 @@
+#!/bin/bash -e
+
+check_install () {
+  dpkg -s $1 &> /dev/null || \
+  (
+     echo ">> package $1 is not installed. Installing..." && \
+     sudo apt -y install $1
+  )
+}
+status-set maintenance "Installing rabbitmq-server"
+juju-log "Installing rabbitmq-server"
+## Check if package rabbitmq-server is installed. If not, install
+check_install rabbitmq-server
+juju-log "rabbitmq-server installed succesfully"
+
+juju-log "Creating user openstack with password OpenStack"
+RABBIT_PASS="OpenStack"
+rabbitmqctl add_user openstack $RABBIT_PASS
+rabbitmqctl set_permissions openstack ".*" ".*" ".*"
+
+touch /tmp/READY
+
+status-set active
